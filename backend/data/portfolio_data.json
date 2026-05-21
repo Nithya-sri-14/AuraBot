@@ -1,0 +1,70 @@
+{
+  "profile": {
+    "name": "Your Name",
+    "title": "Creative Full-Stack Engineer & AI Architect",
+    "subtitle": "Hi, I'm Your Name. A creative full-stack systems developer dedicating myself to designing highly responsive, elegant web applications and robust cloud backend integrations.",
+    "location": "San Francisco, CA",
+    "education": "B.S. in Computer Science",
+    "specialization": "Full-Stack Cloud & Performance Engineering",
+    "email": "your.email@example.com",
+    "github": "https://github.com",
+    "linkedin": "https://linkedin.com",
+    "twitter": "https://twitter.com",
+    "hasResume": false
+  },
+  "stats": [
+    { "num": "5+", "lbl": "Years Industry Experience" },
+    { "num": "40+", "lbl": "Successful Projects Delivered" },
+    { "num": "99%", "lbl": "Client Retention Rate" },
+    { "num": "15+", "lbl": "Technical Certifications" }
+  ],
+  "skills": [
+    { "category": "frontend", "name": "HTML5 (Semantic & Accessible)", "level": 95 },
+    { "category": "frontend", "name": "CSS3 (Flexbox/Grid, OKLCH, Themes)", "level": 92 },
+    { "category": "frontend", "name": "Modern JS (ES6+, Web APIs)", "level": 90 },
+    { "category": "frontend", "name": "Responsive Layouts & Motion", "level": 94 },
+    { "category": "backend", "name": "Node.js / Express.js Servers", "level": 92 },
+    { "category": "backend", "name": "API Design (RESTful & WebSockets)", "level": 88 },
+    { "category": "backend", "name": "SQL / JSON File Databases", "level": 85 },
+    { "category": "backend", "name": "System Security & Auth", "level": 86 },
+    { "category": "systems", "name": "Git / GitHub Workflows", "level": 90 },
+    { "category": "systems", "name": "Environment Orchestration", "level": 88 },
+    { "category": "systems", "name": "Performance Profiling", "level": 85 },
+    { "category": "systems", "name": "CI/CD Pipelines & Deployments", "level": 87 }
+  ],
+  "projects": [
+    {
+      "id": "synapse",
+      "title": "Synapse Workspace",
+      "meta": "Collaboration • AI Systems",
+      "desc": "An AI-powered, real-time rich-text editor and collaborative workspace allowing instant synchronized document manipulation.",
+      "techs": ["HTML5 Semantic Markup", "Modern CSS Grid & Flexbox", "Node.js Cluster", "Express API", "WebSockets protocol", "JSON file storage"],
+      "details": "Designed to optimize real-time concurrent changes without complex database engines, Synapse uses standard web technologies to achieve high visual consistency and accessible collaboration layouts. The backend handles connection syncing and logs documents directly to secured JSON endpoints.",
+      "gradientClass": "visual-synapse",
+      "tag": "<Workspace/>",
+      "category": "ai-ml"
+    },
+    {
+      "id": "zenith",
+      "title": "Zenith Finance Dashboard",
+      "meta": "Finance • Analytics",
+      "desc": "High-fidelity web panel tracking decentralised blockchain portfolios with visual chart animations and real-time updates.",
+      "techs": ["CSS Backdrop Filters", "Responsive SVG Graphs", "Express.js backend", "API Routing", "Environment variables", "CORS security"],
+      "details": "A clean financial user experience built to withstand high density data feeds. Zenith utilizes smooth CSS Transitions and container queries to structure a robust web app that fits onto standard mobile screens without distorting visual panels.",
+      "gradientClass": "visual-zenith",
+      "tag": "$ Zenith API",
+      "category": "frontend"
+    },
+    {
+      "id": "vapor",
+      "title": "Vapor Telemetry Engine",
+      "meta": "Performance • Systems",
+      "desc": "Ultra-low latency data aggregator that parses thousands of microsecond server logs into visual system diagnostics.",
+      "techs": ["Semantic Structure", "Custom scrollbar tokens", "Express routing middleware", "JSON Logging module", "Vanilla JS Engine", "Nodemailer notify"],
+      "details": "Vapor tracks web application metrics in real-time, delivering alert diagnostics directly to engineers. When threshold anomalies are detected, the Express backend fires off secure warning notifications to system administrators using Dotenv configurations.",
+      "gradientClass": "visual-vapor",
+      "tag": "📡 Telemetry",
+      "category": "backend"
+    }
+  ]
+}

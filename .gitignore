@@ -1,9 +1,10 @@
 node_modules/
 .env
-backend/data/portfolio_*.json
 backend/data/users.json
 backend/data/visitors.json
 backend/data/contact_messages.json
+backend/data/portfolio_*.json
+!backend/data/portfolio_data.json
 frontend/assets/resume_*.pdf
 scratch/
 .DS_Store
