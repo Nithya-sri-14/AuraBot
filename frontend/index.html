@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuraPort | Craft Your Professional Portfolio</title>
+  <meta name="description" content="AuraPort — Build and showcase a stunning developer portfolio with a guided wizard or resume import.">
+  <meta name="color-scheme" content="light dark">
+
+  <!-- FOUC Prevention -->
+  <script>
+    {
+      const savedTheme = localStorage.getItem("color-scheme");
+      if (savedTheme) document.querySelector('meta[name="color-scheme"]').content = savedTheme;
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Stitch Design System Stylesheet -->
+  <link rel="stylesheet" href="css/stitch_templates.css">
+
+  <style>
+    /* =========================================================
+       SPA Router — view visibility
+    ========================================================= */
+    .app-view { display: none; }
+    .app-view.active { display: block; }
+
+    /* Auth view uses flex centering */
+    #view-auth.active { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem 1.5rem; }
+
+    /* Setup view */
+    #view-setup.active { display: block; }
+
+    /* =========================================================
+       Auth View Tabs
+    ========================================================= */
+    .auth-tab-row {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--color-card-border);
+      margin-bottom: 2rem;
+    }
+    .auth-tab-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      padding: 0.85rem 1rem;
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      position: relative;
+      transition: color 0.25s;
+    }
+    .auth-tab-btn.active {
+      color: var(--color-primary);
+    }
+    .auth-tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+      border-radius: 2px 2px 0 0;
+    }
+    .auth-tab-panel { display: none; }
+    .auth-tab-panel.active { display: block; }
+
+    /* =========================================================
+       Setup Wizard Styles (moved from inline)
+    ========================================================= */
+    .setup-wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+    .setup-container { width: 100%; max-width: 850px; margin: auto; }
+    .setup-card { padding: 3.5rem 3rem; border-radius: var(--border-radius-lg); margin-bottom: 2rem; }
+
+    .progress-tracker {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 3.5rem; position: relative; padding: 0 1rem;
+    }
+    .progress-line {
+      position: absolute; top: 50%; left: 0; width: 100%; height: 3px;
+      background: var(--color-card-border); z-index: 1; transform: translateY(-50%);
+    }
+    .progress-fill {
+      position: absolute; top: 0; left: 0; height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+      transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+      box-shadow: 0 0 12px var(--color-primary);
+    }
+    .progress-step {
+      position: relative; z-index: 2;
+      display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+    }
+    .step-dot {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--color-bg); border: 2px solid var(--color-card-border);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem; color: var(--color-text-muted);
+      transition: var(--transition-smooth);
+    }
+    .progress-step.active .step-dot {
+      border-color: var(--color-primary); color: var(--color-primary);
+      box-shadow: 0 0 15px oklch(from var(--color-primary) l c h / 30%);
+      transform: scale(1.1);
+    }
+    .progress-step.completed .step-dot {
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+      border-color: transparent; color: white;
+    }
+    .step-label {
+      font-size: 0.8rem; font-weight: 600; color: var(--color-text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px; transition: var(--transition-smooth);
+    }
+    .progress-step.active .step-label { color: var(--color-text); }
+
+    .wizard-step { display: none; animation: fadeInStep 0.4s ease; }
+    .wizard-step.active { display: block; }
+    @keyframes fadeInStep {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .step-header { margin-bottom: 2.5rem; text-align: center; }
+    .step-title { font-family: var(--font-serif); font-size: 2.2rem; margin-bottom: 0.5rem; }
+    .step-subtitle { color: var(--color-text-muted); font-size: 1rem; }
+
+    .choice-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; margin-bottom: 1rem; }
+    @media (max-width: 768px) {
+      .choice-grid { grid-template-columns: 1fr; }
+      .setup-card { padding: 2.5rem 1.5rem; }
+    }
+    .choice-card {
+      background: var(--color-card-bg); border: 1px solid var(--color-card-border);
+      border-radius: var(--border-radius-md); padding: 2.5rem 2rem;
+      text-align: center; cursor: pointer; transition: var(--transition-smooth);
+      position: relative; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center; gap: 1.25rem;
+    }
+    .choice-card::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px;
+      background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .choice-card:hover { transform: translateY(-5px); border-color: var(--color-primary); box-shadow: 0 12px 35px var(--color-shadow); background: var(--color-glass-bg); }
+    .choice-card:hover::before { opacity: 1; }
+    .choice-icon { font-size: 3rem; background: linear-gradient(135deg, var(--color-primary), var(--color-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
+    .choice-title { font-size: 1.35rem; font-weight: 700; }
+    .choice-desc { font-size: 0.95rem; color: var(--color-text-muted); line-height: 1.5; }
+
+    .dropzone-area {
+      border: 2px dashed var(--color-card-border); border-radius: var(--border-radius-md);
+      padding: 3rem 2rem; text-align: center; cursor: pointer;
+      transition: var(--transition-smooth);
+      background: oklch(from var(--color-primary) l c h / 2%);
+      position: relative; margin-top: 1.5rem;
+    }
+    .dropzone-area:hover, .dropzone-area.dragover {
+      border-color: var(--color-primary);
+      background: oklch(from var(--color-primary) l c h / 4%);
+      box-shadow: 0 0 20px oklch(from var(--color-primary) l c h / 10%) inset;
+    }
+    .dropzone-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+    .dropzone-icon { font-size: 2.5rem; color: var(--color-primary); margin-bottom: 1rem; display: block; }
+    .dropzone-text { font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .dropzone-sub { font-size: 0.85rem; color: var(--color-text-muted); }
+
+    .uploading-container {
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      padding: 4rem 2rem; text-align: center; animation: fadeInStep 0.4s ease;
+    }
+    .upload-spinner { position: relative; width: 80px; height: 80px; margin-bottom: 2.5rem; }
+    .spinner-ring {
+      position: absolute; width: 100%; height: 100%;
+      border: 4px solid var(--color-card-border); border-top-color: var(--color-primary);
+      border-radius: 50%; animation: spinRing 1.2s infinite linear;
+    }
+    .spinner-glow {
+      position: absolute; width: 100%; height: 100%;
+      filter: blur(10px); border: 4px solid transparent; border-top-color: var(--color-secondary);
+      border-radius: 50%; animation: spinRing 1.2s infinite linear; opacity: 0.7;
+    }
+    @keyframes spinRing { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    .log-stream {
+      min-height: 50px; margin-top: 1.5rem; max-width: 400px;
+      background: var(--color-scrollbar-track); border: 1px solid var(--color-card-border);
+      padding: 1rem 1.5rem; border-radius: var(--border-radius-sm);
+      font-family: monospace; font-size: 0.85rem; color: var(--color-primary);
+      text-align: left; overflow-y: hidden;
+    }
+    .log-line { animation: slideLog 0.3s ease forwards; margin-bottom: 0.25rem; opacity: 0.9; }
+    @keyframes slideLog { from { transform: translateY(5px); opacity: 0; } to { transform: translateY(0); opacity: 0.9; } }
+
+    .slider-row { display: flex; align-items: center; gap: 1.5rem; margin-top: 0.5rem; }
+    .slider-row input[type="range"] {
+      flex: 1; height: 6px; border-radius: 5px; outline: none;
+      background: var(--color-scrollbar-track); -webkit-appearance: none; appearance: none;
+      accent-color: var(--color-primary);
+    }
+    .slider-value { font-weight: 700; font-size: 0.95rem; color: var(--color-primary); min-width: 40px; text-align: right; }
+
+    .dynamic-list-container {
+      background: var(--color-scrollbar-track); border: 1px solid var(--color-card-border);
+      border-radius: var(--border-radius-md); padding: 1.5rem; margin-top: 1rem;
+      display: flex; flex-direction: column; gap: 1rem;
+    }
+    .dynamic-item {
+      background: var(--color-bg); border: 1px solid var(--color-card-border);
+      border-radius: var(--border-radius-sm); padding: 1.25rem;
+      display: flex; flex-direction: column; gap: 1rem;
+      position: relative; animation: fadeInStep 0.3s ease;
+    }
+    .delete-item-btn {
+      position: absolute; top: 1rem; right: 1rem;
+      background: none; border: none; color: var(--color-accent);
+      cursor: pointer; font-size: 1.1rem; opacity: 0.7; transition: var(--transition-smooth);
+    }
+    .delete-item-btn:hover { opacity: 1; transform: scale(1.1); }
+
+    .wizard-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
+    .wizard-footer .btn { min-width: 130px; }
+    .contact-form textarea { min-height: 100px; }
+
+    .gradient-select { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 0.5rem; }
+    .gradient-opt {
+      border: 1px solid var(--color-card-border); border-radius: var(--border-radius-sm);
+      padding: 0.75rem; text-align: center; cursor: pointer; font-size: 0.85rem;
+      font-weight: 600; transition: var(--transition-smooth);
+    }
+    .gradient-opt.active {
+      border-color: var(--color-primary); background: var(--color-scrollbar-track);
+      box-shadow: 0 0 10px oklch(from var(--color-primary) l c h / 15%);
+    }
+  </style>
+</head>
+<body>
+  <!-- Floating canvas particles -->
+  <canvas id="particles-canvas" class="particles-canvas" aria-hidden="true"></canvas>
+
+  <!-- Scroll Progress Indicator -->
+  <div id="scroll-progress" class="scroll-progress" aria-hidden="true"></div>
+
+  <!-- Shared Background Glows -->
+  <div class="glow-bg glow-bg-1" aria-hidden="true"></div>
+  <div class="glow-bg glow-bg-2" aria-hidden="true"></div>
+
+  <!-- ================================================================
+       VIEW 1: PORTFOLIO SHOWCASE
+  ================================================================ -->
+  <div id="view-portfolio" class="app-view active">
+
+    <header id="header">
+      <div class="container nav-container">
+        <a href="#" class="logo" id="logo-link" aria-label="AuraPort Home" onclick="navigate('portfolio')">
+          <span class="logo-accent">&lt;</span><span id="logo-text">AuraPort</span><span class="logo-accent">/&gt;</span>
+        </a>
+        <nav id="navbar" aria-label="Main Navigation">
+          <ul class="nav-links">
+            <li><a href="#home" class="nav-link active">Home</a></li>
+            <li><a href="#about" class="nav-link">About</a></li>
+            <li><a href="#services" class="nav-link">Services</a></li>
+            <li><a href="#skills" class="nav-link">Skills</a></li>
+            <li><a href="#experience" class="nav-link">Experience</a></li>
+            <li><a href="#projects" class="nav-link">Projects</a></li>
+            <li><a href="#testimonials" class="nav-link">Testimonials</a></li>
+            <li><a href="#contact" class="nav-link">Contact</a></li>
+          </ul>
+        </nav>
+        <div class="nav-actions">
+          <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle Color Scheme">
+            <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+          <button id="mobile-menu-btn" class="mobile-menu-toggle" aria-expanded="false" aria-controls="navbar" aria-label="Toggle Menu">
+            <span class="hamburger-bar"></span>
+            <span class="hamburger-bar"></span>
+            <span class="hamburger-bar"></span>
+          </button>
+          <!-- Auth nav button -->
+          <div id="nav-auth-btn" style="margin-left:0.5rem;"></div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Hero Section -->
+      <section id="home" class="hero-section">
+        <div class="container hero-grid">
+          <div class="hero-content">
+            <div class="badge-accent" id="profile-availability">Available for Select Consulting</div>
+            <h1 class="hero-title" id="hero-title">Welcome to My <span class="text-gradient">Portfolio</span></h1>
+            <p class="hero-subtitle" id="hero-subtitle">Loading developer details...</p>
+            <div class="hero-role-wrapper">
+              <span class="role-prefix">Architecting</span> <span id="typewriter-role" class="text-gradient font-serif"></span><span class="typewriter-cursor">|</span>
+            </div>
+            <div class="hero-actions" id="hero-actions"></div>
+            <div class="floating-socials">
+              <a href="#" id="floating-github" class="floating-social-icon" target="_blank" rel="noopener" aria-label="GitHub"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+              <a href="#" id="floating-linkedin" class="floating-social-icon" target="_blank" rel="noopener" aria-label="LinkedIn"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-linkedin" viewBox="0 0 16 16"><path d="M0 1.146C0 .513.526 0 1.175 0h13.65C15.474 0 16 .513 16 1.146v13.708c0 .633-.526 1.146-1.175 1.146H1.175C.526 16 0 15.487 0 14.854V1.146zm4.943 12.248V6.169H2.542v7.225h2.401zm-1.2-8.212c.837 0 1.358-.554 1.358-1.248-.015-.709-.52-1.248-1.342-1.248-.822 0-1.359.54-1.359 1.248 0 .694.521 1.248 1.327 1.248h.016zm4.908 8.212V9.359c0-.216.016-.432.08-.586.173-.431.568-.878 1.232-.878.869 0 1.216.662 1.216 1.634v3.865h2.401V9.25c0-2.22-1.184-3.252-2.764-3.252-1.274 0-1.845.7-2.165 1.193v.025h-.016a5.54 5.54 0 0 1 .016-.025V6.169h-2.4c.03.678 0 7.225 0 7.225h2.4z"/></svg></a>
+              <a href="#" id="floating-twitter" class="floating-social-icon" target="_blank" rel="noopener" aria-label="Twitter"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi-twitter-x" viewBox="0 0 16 16"><path d="M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.6.75zm-.86 13.028h1.36L4.323 2.145H2.865l8.875 11.633z"/></svg></a>
+            </div>
+          </div>
+          <div class="hero-visual" aria-hidden="true">
+            <div class="interactive-card-wrapper">
+              <div class="hero-avatar-container" id="hero-avatar-container">
+                <span class="hero-avatar-initials" id="hero-avatar-initials">AP</span>
+              </div>
+              <svg class="hero-svg" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="svgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="var(--color-primary-light)"/>
+                    <stop offset="100%" stop-color="var(--color-secondary-light)"/>
+                  </linearGradient>
+                  <filter id="svgGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="15" result="blur"/>
+                    <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                  </filter>
+                </defs>
+                <circle cx="250" cy="250" r="180" fill="url(#svgGrad)" fill-opacity="0.08" filter="url(#svgGlow)"/>
+                <path d="M 100,250 L 400,250 M 250,100 L 250,400" stroke="currentColor" stroke-opacity="0.1" stroke-width="2" stroke-dasharray="10 10"/>
+                <circle cx="250" cy="250" r="120" stroke="currentColor" stroke-opacity="0.15" stroke-width="1.5"/>
+                <circle cx="250" cy="250" r="70" stroke="currentColor" stroke-opacity="0.25" stroke-width="1.5" stroke-dasharray="5 5"/>
+                <circle cx="250" cy="250" r="30" fill="url(#svgGrad)" filter="url(#svgGlow)" class="pulse-node"/>
+                <g class="orbit-sat-1">
+                  <circle cx="370" cy="250" r="10" fill="var(--color-secondary-light)"/>
+                  <path d="M370 235 L 390 220" stroke="currentColor" stroke-opacity="0.4"/>
+                  <text x="395" y="215" fill="currentColor" font-size="12" font-family="Space Grotesk" opacity="0.6">&lt;JS/&gt;</text>
+                </g>
+                <g class="orbit-sat-2">
+                  <circle cx="250" cy="130" r="12" fill="var(--color-primary-light)"/>
+                  <path d="M250 112 L 230 95" stroke="currentColor" stroke-opacity="0.4"/>
+                  <text x="180" y="90" fill="currentColor" font-size="12" font-family="Space Grotesk" opacity="0.6">Node.js</text>
+                </g>
+                <g class="orbit-sat-3">
+                  <circle cx="180" cy="320" r="8" fill="var(--color-accent-light)"/>
+                </g>
+              </svg>
+              <div class="glass-float-card">
+                <span class="card-icon">⚡</span>
+                <div class="card-text">
+                  <span class="card-label">Server Health</span>
+                  <span class="card-val">99.98% Uptime</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- About Section -->
+      <section id="about" class="about-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">About Me</h2>
+            <p class="section-tagline" id="about-tagline">Blending technology and details to build high-end systems</p>
+          </div>
+          <div class="about-grid">
+            <div class="about-info">
+              <h3 class="about-heading">My Mission</h3>
+              <div id="about-narrative"></div>
+              <div class="personal-details" id="personal-details"></div>
+            </div>
+            <div class="stats-grid" id="stats-grid"></div>
+          </div>
+
+          <!-- Academic Rubric Expanded Cards -->
+          <div class="about-extra-grid">
+            <div class="about-card glass-float-card-static">
+              <h3 class="card-heading">
+                <span class="card-heading-icon">🎯</span> Career Goals
+              </h3>
+              <p class="card-desc-text">
+                My ultimate career goal is to architect highly scalable, robust cloud-native systems integrated with generative AI capabilities. I aim to lead cross-functional engineering teams in building secure, distributed software architectures that solve complex, real-world industry challenges.
+              </p>
+            </div>
+            <div class="about-card glass-float-card-static">
+              <h3 class="card-heading">
+                <span class="card-heading-icon">✨</span> Fun Facts &amp; Interests
+              </h3>
+              <div class="fun-facts-grid">
+                <div class="fact-card">☕ Coffee &amp; Code</div>
+                <div class="fact-card">📚 Tech Blogs</div>
+                <div class="fact-card">🎮 Strategy Games</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Services Section -->
+      <section id="services" class="services-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">My Services</h2>
+            <p class="section-tagline">Engineered solutions tailored to modern technical specifications</p>
+          </div>
+          <div class="services-grid" id="services-grid">
+            <!-- Dynamic services content -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Skills Section -->
+      <section id="skills" class="skills-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">My Tech Stack</h2>
+            <p class="section-tagline">Constantly learning, refining, and applying industry standards</p>
+          </div>
+          <div class="skills-grid" id="skills-grid"></div>
+        </div>
+      </section>
+
+      <!-- Experience Section -->
+      <section id="experience" class="experience-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Professional Journey</h2>
+            <p class="section-tagline">A timeline of my academic milestones and industrial career growth</p>
+          </div>
+          <div class="timeline-container" id="timeline-container">
+            <!-- Dynamic experience timeline -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Projects Section -->
+      <section id="projects" class="projects-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Selected Projects</h2>
+            <p class="section-tagline">Real-world applications built for security, scale, and performance</p>
+          </div>
+          <div class="projects-filter-row" role="tablist">
+            <button class="filter-btn active" data-filter="all" role="tab" aria-selected="true">All Architecture</button>
+            <button class="filter-btn" data-filter="frontend" role="tab" aria-selected="false">Frontend UI/UX</button>
+            <button class="filter-btn" data-filter="backend" role="tab" aria-selected="false">Backend Servers</button>
+            <button class="filter-btn" data-filter="ai-ml" role="tab" aria-selected="false">AI &amp; Systems</button>
+          </div>
+          <div class="projects-grid" id="projects-grid"></div>
+        </div>
+      </section>
+
+      <!-- Skill Recommendations Section -->
+      <section id="recommendations" class="recommendations-section scroll-reveal" style="display:none;">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">📈 Skill Growth Recommendations</h2>
+            <p class="section-tagline">Personalized suggestions to strengthen your tech stack based on your profile</p>
+          </div>
+          <div class="recommendations-grid" id="recommendations-grid"></div>
+        </div>
+      </section>
+
+      <!-- Certifications Section -->
+      <section id="certifications" class="certifications-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Badges &amp; Certifications</h2>
+            <p class="section-tagline">Verifiable professional credentials validating domain excellence</p>
+          </div>
+          <div class="certifications-grid" id="certifications-grid">
+            <!-- Dynamic certifications content -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Achievements Section -->
+      <section id="achievements" class="achievements-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Key Achievements</h2>
+            <p class="section-tagline">Highlights of competitions, smart hacks, and performance benchmarks</p>
+          </div>
+          <div class="achievements-grid" id="achievements-grid">
+            <!-- Dynamic achievements content -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Testimonials Section -->
+      <section id="testimonials" class="testimonials-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Testimonials</h2>
+            <p class="section-tagline">Kind words from academic mentors, team leads, and clients</p>
+          </div>
+          <div class="testimonials-carousel-wrapper">
+            <button class="carousel-control prev" id="carousel-prev" aria-label="Previous Testimonial">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <div class="testimonials-carousel" id="testimonials-carousel">
+              <!-- Dynamic slides content -->
+            </div>
+            <button class="carousel-control next" id="carousel-next" aria-label="Next Testimonial">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div class="carousel-dots" id="carousel-dots">
+            <!-- Dynamic dots content -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Developer Analytics Hub & Insights -->
+      <section id="insights" class="insights-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Developer Hub &amp; Live Diagnostics</h2>
+            <p class="section-tagline">Real-time git activities, environment metrics, and technical publications</p>
+          </div>
+          
+          <div class="insights-grid">
+            <!-- Left Side: Live Server & Weather Diagnostics Panel -->
+            <div class="diagnostics-panel glass-card">
+              <h3 class="panel-heading">⚡ Live Node Telemetry</h3>
+              <div class="diag-metrics">
+                <div class="diag-metric-item">
+                  <span class="diag-label">Cloud Environment</span>
+                  <span class="diag-val active-status">Production-Optimized</span>
+                </div>
+                <div class="diag-metric-item">
+                  <span class="diag-label">Simulated Latency</span>
+                  <span class="diag-val latency-status">12 ms</span>
+                </div>
+                <div class="diag-metric-item">
+                  <span class="diag-label">Location Environment</span>
+                  <span class="diag-val weather-status" id="weather-diag-status">San Francisco: 64°F | ⛅ Clear</span>
+                </div>
+                <div class="diag-metric-item">
+                  <span class="diag-label">Total Recruiter Views</span>
+                  <span class="diag-val visitor-count" id="visitor-count-text">Loading...</span>
+                </div>
+              </div>
+              
+              <!-- Green GitHub Commit Grid -->
+              <div class="github-activity-grid">
+                <h4 class="grid-heading">📅 Git Contribution Pipeline (Past Year)</h4>
+                <div class="github-commits-container" id="github-commits-container">
+                  <!-- Dynamic grid generated by JS -->
+                </div>
+                <div class="github-legend">
+                  <span>Less</span>
+                  <span class="legend-box level-0"></span>
+                  <span class="legend-box level-1"></span>
+                  <span class="legend-box level-2"></span>
+                  <span class="legend-box level-3"></span>
+                  <span class="legend-box level-4"></span>
+                  <span>More</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Right Side: Publications / Recruiter Insights -->
+            <div class="publications-panel glass-card">
+              <h3 class="panel-heading">📚 Engineering Insights</h3>
+              <div class="blog-grid">
+                <article class="blog-card glass-float-card-static">
+                  <div class="blog-meta">May 2026 • Performance</div>
+                  <h4 class="blog-title">Optimizing Express Garbage Collection &amp; Clustered Node Architectures</h4>
+                  <p class="blog-desc">An in-depth review of memory leak profiling in high-concurrency Node.js endpoints, detailing heap snapshots and baseline V8 optimization guidelines.</p>
+                  <a href="#insights" class="btn-text blog-read-btn" onclick="showToast('Loading full whitepaper from recruiter archives...', 'info')">Read Whitepaper &rarr;</a>
+                </article>
+                <article class="blog-card glass-float-card-static">
+                  <div class="blog-meta">April 2026 • UI/UX</div>
+                  <h4 class="blog-title">Designing Recruiters-First Dynamic Portfolios: Glassmorphism &amp; Trailing Cursors</h4>
+                  <p class="blog-desc">How to combine sub-millisecond custom mouse interaction controllers, modular responsive SVG assets, and modern OKLCH CSS variables for premium layouts.</p>
+                  <a href="#insights" class="btn-text blog-read-btn" onclick="showToast('Loading full case study from design portfolio archives...', 'info')">Read Case Study &rarr;</a>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Contact Section -->
+      <section id="contact" class="contact-section scroll-reveal">
+        <div class="container">
+          <div class="section-header">
+            <h2 class="section-title">Get In Touch</h2>
+            <p class="section-tagline">Interested in partnering or have a technical project? Let's talk.</p>
+          </div>
+          <div class="contact-grid">
+            <div class="contact-sidebar">
+              <h3 class="sidebar-heading">Contact Details</h3>
+              <p class="sidebar-desc">Feel free to drop a message, and I'll respond within 24 business hours.</p>
+              <ul class="contact-links-list" id="contact-links-list"></ul>
+              
+              <!-- Premium Dark-Mode Map Widget -->
+              <div class="dark-map-container glass-card">
+                <div class="map-header">
+                  <span class="map-dot active"></span>
+                  <span class="map-title">HQ Locator — San Francisco, CA</span>
+                </div>
+                <div class="map-body">
+                  <svg class="map-svg" viewBox="0 0 400 200" aria-label="HQ Map Grid Locator">
+                    <defs>
+                      <radialGradient id="mapGlow" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="var(--color-primary)" stop-opacity="0.3"/>
+                        <stop offset="100%" stop-color="var(--color-primary)" stop-opacity="0"/>
+                      </radialGradient>
+                    </defs>
+                    <path class="map-path" d="M 20,40 Q 60,60 100,30 T 180,70 T 260,40 T 340,80 T 380,50" fill="none" stroke="var(--color-glass-border)" stroke-width="1.5" stroke-dasharray="4,4"/>
+                    <path class="map-path" d="M 40,120 Q 110,90 180,140 T 320,110 T 360,150" fill="none" stroke="var(--color-glass-border)" stroke-width="1"/>
+                    <line x1="0" y1="50" x2="400" y2="50" stroke="var(--color-glass-border)" stroke-width="0.5" stroke-opacity="0.2"/>
+                    <line x1="0" y1="100" x2="400" y2="100" stroke="var(--color-glass-border)" stroke-width="0.5" stroke-opacity="0.2"/>
+                    <line x1="0" y1="150" x2="400" y2="150" stroke="var(--color-glass-border)" stroke-width="0.5" stroke-opacity="0.2"/>
+                    <line x1="100" y1="0" x2="100" y2="200" stroke="var(--color-glass-border)" stroke-width="0.5" stroke-opacity="0.2"/>
+                    <line x1="200" y1="0" x2="200" y2="200" stroke="var(--color-glass-border)" stroke-width="0.5" stroke-opacity="0.2"/>
+                    <line x1="300" y1="0" x2="300" y2="200" stroke="var(--color-glass-border)" stroke-width="0.5" stroke-opacity="0.2"/>
+                    <circle cx="200" cy="100" r="45" fill="url(#mapGlow)"/>
+                    <circle cx="200" cy="100" r="10" fill="var(--color-primary)" opacity="0.35" class="map-ping"/>
+                    <circle cx="200" cy="100" r="4" fill="var(--color-primary)"/>
+                  </svg>
+                  <div class="map-coordinate">37.7749° N, 122.4194° W</div>
+                </div>
+              </div>
+            </div>
+            <div class="contact-form-wrapper">
+              <form id="contact-form" class="contact-form" novalidate>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="form-name">Your Full Name <span class="required">*</span></label>
+                    <input type="text" id="form-name" name="name" placeholder="Your Full Name" required minlength="2">
+                    <span class="error-msg" aria-live="polite"></span>
+                  </div>
+                  <div class="form-group">
+                    <label for="form-email">Email Address <span class="required">*</span></label>
+                    <input type="email" id="form-email" name="email" placeholder="alex@company.com" required>
+                    <span class="error-msg" aria-live="polite"></span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="form-subject">Subject</label>
+                  <input type="text" id="form-subject" name="subject" placeholder="Project Consulting Request">
+                </div>
+                <div class="form-group">
+                  <label for="form-message">Detailed Message <span class="required">*</span></label>
+                  <textarea id="form-message" name="message" rows="5" placeholder="Tell me about your tech requirements, timeline, and goals..." required minlength="10"></textarea>
+                  <span class="error-msg" aria-live="polite"></span>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" id="submit-btn" class="btn btn-primary">
+                    <span>Send Secure Message</span>
+                    <span class="loader-spinner" aria-hidden="true"></span>
+                  </button>
+                  <div id="form-status" class="form-status" role="status" aria-live="polite"></div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Project Details Modal -->
+    <dialog id="project-modal" closedby="any" aria-labelledby="modal-title">
+      <div class="modal-box">
+        <header class="modal-header">
+          <h2 id="modal-title" class="modal-title">Project Loading...</h2>
+          <button type="button" class="close-modal-btn" aria-label="Close Project Modal">&times;</button>
+        </header>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </dialog>
+
+    <footer>
+      <div class="container footer-content">
+        <p class="copyright">&copy; 2026 <span id="footer-name">AuraPort</span>. Built with vanilla HTML, modern CSS and Express.js. All rights reserved. <span class="visitor-badge" id="footer-visitor-count">Recruiter Node Views: Loading...</span></p>
+        <div class="footer-links">
+          <a href="#home">Home</a>
+          <a href="#about">About</a>
+          <a href="#skills">Skills</a>
+          <a href="#projects">Projects</a>
+          <a href="#contact">Contact</a>
+          <a href="#" onclick="navigate('login')" style="opacity:0.5;">Sign In</a>
+        </div>
+      </div>
+    </footer>
+  </div><!-- /view-portfolio -->
+
+
+  <!-- ================================================================
+       VIEW 2: AUTH (LOGIN + SIGNUP TABS)
+  ================================================================ -->
+  <div id="view-auth" class="app-view">
+    <div class="login-card glass-float-card-static" style="width:100%;max-width:480px;">
+      <div class="login-header">
+        <a href="#" class="login-logo" onclick="navigate('portfolio')" aria-label="AuraPort Home">
+          <span class="logo-accent">&lt;</span>AuraPort<span class="logo-accent">/&gt;</span>
+        </a>
+        <h1 class="login-title" id="auth-view-title">Welcome Back</h1>
+        <p class="login-subtitle" id="auth-view-subtitle">Sign in or create your account</p>
+      </div>
+
+      <!-- Tab switcher -->
+      <div class="auth-tab-row" role="tablist">
+        <button class="auth-tab-btn active" id="tab-login-btn" role="tab" aria-selected="true" aria-controls="tab-login">Sign In</button>
+        <button class="auth-tab-btn" id="tab-signup-btn" role="tab" aria-selected="false" aria-controls="tab-signup">Create Account</button>
+      </div>
+
+      <!-- LOGIN TAB -->
+      <div id="tab-login" class="auth-tab-panel active" role="tabpanel">
+        <form id="login-form" class="contact-form" novalidate>
+          <div class="form-group">
+            <label for="login-email">Email <span class="required">*</span></label>
+            <input type="email" id="login-email" name="email" placeholder="you@example.com" autocomplete="email" enterkeyhint="next" required>
+            <span class="error-msg" aria-live="polite"></span>
+          </div>
+          <div class="form-group password-group">
+            <div class="password-label-row">
+              <label for="login-password">Password <span class="required">*</span></label>
+              <button type="button" id="toggle-login-pw" class="btn-text show-password-toggle-btn" aria-label="Show password">Show</button>
+            </div>
+            <input type="password" id="login-password" name="password" placeholder="Enter your password" autocomplete="current-password" enterkeyhint="done" required>
+            <span class="error-msg" aria-live="polite"></span>
+          </div>
+          <div id="login-status" class="form-status" role="status" aria-live="polite"></div>
+          <div class="login-actions">
+            <button type="submit" id="login-submit-btn" class="btn btn-primary btn-full-width">
+              <span>Sign In</span>
+              <span class="loader-spinner" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-full-width" onclick="switchAuthTab('signup')">
+              <span>Don't have an account? Sign Up</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-full-width" style="opacity:0.7;" onclick="navigate('portfolio')">
+              <span>Back to Portfolio</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- SIGNUP TAB -->
+      <div id="tab-signup" class="auth-tab-panel" role="tabpanel">
+        <form id="signup-form" class="contact-form" novalidate>
+          <div class="form-group">
+            <label for="signup-email">Email <span class="required">*</span></label>
+            <input type="email" id="signup-email" name="email" placeholder="you@example.com" autocomplete="email" enterkeyhint="next" required>
+            <span class="error-msg" aria-live="polite"></span>
+            <span style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.25rem;display:block;">Use your preferred email address for signing in.</span>
+          </div>
+          <div class="form-group password-group">
+            <div class="password-label-row">
+              <label for="signup-password">Password <span class="required">*</span></label>
+              <button type="button" id="toggle-signup-pw" class="btn-text show-password-toggle-btn" aria-label="Show password">Show</button>
+            </div>
+            <input type="password" id="signup-password" name="password" placeholder="Create a strong password" autocomplete="new-password" enterkeyhint="done" minlength="6" required>
+            <span class="error-msg" aria-live="polite"></span>
+            <span style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.25rem;display:block;">Must be at least 6 characters.</span>
+          </div>
+          <div id="signup-status" class="form-status" role="status" aria-live="polite"></div>
+          <div class="login-actions">
+            <button type="submit" id="signup-submit-btn" class="btn btn-primary btn-full-width">
+              <span>Create Account &amp; Start</span>
+              <span class="loader-spinner" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-full-width" onclick="switchAuthTab('login')">
+              <span>Already have an account? Sign In</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div><!-- /view-auth -->
+
+
+  <!-- ================================================================
+       VIEW 3: SETUP WIZARD
+  ================================================================ -->
+  <div id="view-setup" class="app-view">
+    <div class="setup-wrapper">
+      <div class="setup-container">
+        <header style="text-align:center;margin-bottom:2.5rem;">
+          <a href="#" class="login-logo" style="display:inline-block;" onclick="navigate('portfolio')">
+            <span class="logo-accent">&lt;</span>AuraPort<span class="logo-accent">/&gt;</span>
+          </a>
+        </header>
+
+        <!-- Progress tracker -->
+        <nav class="progress-tracker" aria-label="Setup steps">
+          <div class="progress-line" aria-hidden="true">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+          <div class="progress-step active" id="step-nav-1"><div class="step-dot">1</div><span class="step-label">Start</span></div>
+          <div class="progress-step" id="step-nav-2"><div class="step-dot">2</div><span class="step-label">Profile</span></div>
+          <div class="progress-step" id="step-nav-3"><div class="step-dot">3</div><span class="step-label">Stats</span></div>
+          <div class="progress-step" id="step-nav-4"><div class="step-dot">4</div><span class="step-label">Skills</span></div>
+          <div class="progress-step" id="step-nav-5"><div class="step-dot">5</div><span class="step-label">Projects</span></div>
+        </nav>
+
+        <!-- Parsing Loader -->
+        <section id="parsing-loader" class="glass-float-card-static setup-card uploading-container">
+          <div class="upload-spinner" aria-hidden="true">
+            <div class="spinner-ring"></div>
+            <div class="spinner-glow"></div>
+          </div>
+          <h2 class="step-title">Analyzing Resume</h2>
+          <p class="step-subtitle">Our AI and heuristic parsers are reading your PDF resume data...</p>
+          <div class="log-stream" id="log-stream" aria-live="polite">
+            <div class="log-line">&gt; Initiating engine...</div>
+          </div>
+        </section>
+
+        <!-- Wizard Card -->
+        <main class="glass-float-card-static setup-card" id="wizard-card">
+          <form id="setup-wizard-form" class="contact-form" novalidate>
+
+            <!-- STEP 1: CHOOSE PATH -->
+            <div class="wizard-step active" id="step-content-1">
+              <div class="step-header">
+                <h1 class="step-title">Welcome to AuraPort!</h1>
+                <p class="step-subtitle">Choose how you want to build your portfolio. Let's craft something remarkable.</p>
+              </div>
+              <div class="choice-grid" style="grid-template-columns:repeat(2,1fr);">
+                <div class="choice-card" id="choice-manual" role="button" tabindex="0" aria-label="Start Manual Setup">
+                  <span class="choice-icon" aria-hidden="true">✍️</span>
+                  <h2 class="choice-title">Manual Guided Form</h2>
+                  <p class="choice-desc">Build your details step-by-step with an interactive design assistant across 5 easy steps.</p>
+                </div>
+                <div class="choice-card" id="choice-quickstart" role="button" tabindex="0" aria-label="Quick Start">
+                  <span class="choice-icon" aria-hidden="true">🚀</span>
+                  <h2 class="choice-title">Quick Start</h2>
+                  <p class="choice-desc">Enter just your name and title, and we'll generate a complete portfolio instantly.</p>
+                </div>
+                <div class="choice-card" id="choice-resume" style="cursor:default;">
+                  <span class="choice-icon" aria-hidden="true">📄</span>
+                  <h2 class="choice-title">Import from Resume</h2>
+                  <p class="choice-desc">Upload your PDF resume — AI extracts &amp; pre-fills your entire portfolio instantly!</p>
+                  <div class="dropzone-area" id="dropzone" style="margin-top:0.5rem;padding:1.5rem 1rem;">
+                    <span class="dropzone-icon" aria-hidden="true" style="font-size:1.8rem;">📥</span>
+                    <div class="dropzone-text" style="font-size:0.9rem;">Drop PDF here</div>
+                    <div class="dropzone-sub" style="font-size:0.8rem;">or click to browse</div>
+                    <input type="file" id="resume-input" class="dropzone-input" accept=".pdf">
+                  </div>
+                </div>
+                <div class="choice-card" id="choice-github" role="button" tabindex="0" aria-label="Import from GitHub">
+                  <span class="choice-icon" aria-hidden="true">🐙</span>
+                  <h2 class="choice-title">Import from GitHub</h2>
+                  <p class="choice-desc">Enter your GitHub username to fetch your profile, repos, and tech stack automatically.</p>
+                </div>
+              </div>
+              <!-- Quick Start inline form -->
+              <div id="quickstart-form" style="display:none;margin-top:1.5rem;padding:1.5rem;background:var(--color-scrollbar-track);border-radius:var(--border-radius-md);">
+                <h3 style="font-size:1.1rem;margin-bottom:1rem;">Quick Start — Just Name &amp; Title</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+                  <div class="form-group"><label>Full Name <span class="required">*</span></label><input type="text" id="quick-name" required placeholder="Your Name"><span class="error-msg"></span></div>
+                  <div class="form-group"><label>Professional Title <span class="required">*</span></label><input type="text" id="quick-title" required placeholder="e.g. Full-Stack Developer"><span class="error-msg"></span></div>
+                </div>
+                <div style="display:flex;gap:1rem;margin-top:1rem;">
+                  <button type="button" id="quickstart-go-btn" class="btn btn-primary">Generate Portfolio</button>
+                  <button type="button" id="quickstart-cancel-btn" class="btn btn-secondary">Cancel</button>
+                </div>
+              </div>
+              <!-- GitHub Import inline form -->
+              <div id="github-form" style="display:none;margin-top:1.5rem;padding:1.5rem;background:var(--color-scrollbar-track);border-radius:var(--border-radius-md);">
+                <h3 style="font-size:1.1rem;margin-bottom:1rem;">🐙 Import from GitHub</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+                  <div class="form-group"><label>GitHub Username <span class="required">*</span></label><input type="text" id="github-username" required placeholder="e.g. octocat"><span class="error-msg"></span></div>
+                </div>
+                <div style="display:flex;gap:1rem;margin-top:1rem;">
+                  <button type="button" id="github-import-btn" class="btn btn-primary">Fetch &amp; Generate</button>
+                  <button type="button" id="github-cancel-btn" class="btn btn-secondary">Cancel</button>
+                </div>
+                <div id="github-status" style="margin-top:1rem;font-size:0.85rem;color:var(--color-text-muted);"></div>
+              </div>
+            </div>
+
+            <!-- STEP 2: PROFILE -->
+            <div class="wizard-step" id="step-content-2">
+              <div class="step-header">
+                <h1 class="step-title">Profile &amp; Identity</h1>
+                <p class="step-subtitle">Introduce yourself and define your core branding elements.</p>
+              </div>
+              <div class="form-group">
+                <label for="profile-name">Full Name <span class="required">*</span></label>
+                <input type="text" id="profile-name" required placeholder="e.g. Your Full Name">
+                <span class="error-msg" aria-live="polite"></span>
+              </div>
+              <div class="form-group">
+                <label for="profile-title">Professional Title <span class="required">*</span></label>
+                <input type="text" id="profile-title" required placeholder="e.g. Creative Full-Stack Engineer &amp; AI Architect">
+                <span class="error-msg" aria-live="polite"></span>
+              </div>
+              <div class="form-group">
+                <label for="profile-subtitle">Professional Bio <span class="required">*</span></label>
+                <textarea id="profile-subtitle" required placeholder="A short paragraph introducing your skills, passions, and background."></textarea>
+                <span class="error-msg" aria-live="polite"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem;">
+                <div class="form-group">
+                  <label for="profile-location">Location</label>
+                  <input type="text" id="profile-location" placeholder="e.g. San Francisco, CA">
+                </div>
+                <div class="form-group">
+                  <label for="profile-email">Contact Email <span class="required">*</span></label>
+                  <input type="email" id="profile-email" required placeholder="e.g. alex@gmail.com">
+                  <span class="error-msg" aria-live="polite"></span>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem;">
+                <div class="form-group">
+                  <label for="profile-education">Education / Degree</label>
+                  <input type="text" id="profile-education" placeholder="e.g. B.S. in Computer Science">
+                </div>
+                <div class="form-group">
+                  <label for="profile-specialization">Technical Specialization</label>
+                  <input type="text" id="profile-specialization" placeholder="e.g. Full-Stack Systems &amp; AI">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;">
+                <div class="form-group">
+                  <label for="profile-github">GitHub URL</label>
+                  <input type="url" id="profile-github" placeholder="https://github.com/username">
+                </div>
+                <div class="form-group">
+                  <label for="profile-linkedin">LinkedIn URL</label>
+                  <input type="url" id="profile-linkedin" placeholder="https://linkedin.com/in/username">
+                </div>
+                <div class="form-group">
+                  <label for="profile-twitter">Twitter / X URL</label>
+                  <input type="url" id="profile-twitter" placeholder="https://twitter.com/username">
+                </div>
+              </div>
+            </div>
+
+            <!-- STEP 3: STATS -->
+            <div class="wizard-step" id="step-content-3">
+              <div class="step-header">
+                <h1 class="step-title">Key Analytics &amp; Stats</h1>
+                <p class="step-subtitle">Provide four impressive highlight metrics for your profile dashboard.</p>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2rem;">
+                <fieldset style="border:1px solid var(--color-card-border);padding:1.5rem;border-radius:var(--border-radius-sm);">
+                  <legend style="padding:0 0.5rem;font-weight:700;color:var(--color-primary);">Stat Metric #1</legend>
+                  <div class="form-group"><label for="stat-num-0">Value <span class="required">*</span></label><input type="text" id="stat-num-0" required placeholder="e.g. 5+"><span class="error-msg"></span></div>
+                  <div class="form-group"><label for="stat-lbl-0">Label <span class="required">*</span></label><input type="text" id="stat-lbl-0" required placeholder="e.g. Years Experience"><span class="error-msg"></span></div>
+                </fieldset>
+                <fieldset style="border:1px solid var(--color-card-border);padding:1.5rem;border-radius:var(--border-radius-sm);">
+                  <legend style="padding:0 0.5rem;font-weight:700;color:var(--color-primary);">Stat Metric #2</legend>
+                  <div class="form-group"><label for="stat-num-1">Value <span class="required">*</span></label><input type="text" id="stat-num-1" required placeholder="e.g. 40+"><span class="error-msg"></span></div>
+                  <div class="form-group"><label for="stat-lbl-1">Label <span class="required">*</span></label><input type="text" id="stat-lbl-1" required placeholder="e.g. Projects Delivered"><span class="error-msg"></span></div>
+                </fieldset>
+                <fieldset style="border:1px solid var(--color-card-border);padding:1.5rem;border-radius:var(--border-radius-sm);">
+                  <legend style="padding:0 0.5rem;font-weight:700;color:var(--color-primary);">Stat Metric #3</legend>
+                  <div class="form-group"><label for="stat-num-2">Value <span class="required">*</span></label><input type="text" id="stat-num-2" required placeholder="e.g. 99%"><span class="error-msg"></span></div>
+                  <div class="form-group"><label for="stat-lbl-2">Label <span class="required">*</span></label><input type="text" id="stat-lbl-2" required placeholder="e.g. Success Rate"><span class="error-msg"></span></div>
+                </fieldset>
+                <fieldset style="border:1px solid var(--color-card-border);padding:1.5rem;border-radius:var(--border-radius-sm);">
+                  <legend style="padding:0 0.5rem;font-weight:700;color:var(--color-primary);">Stat Metric #4</legend>
+                  <div class="form-group"><label for="stat-num-3">Value <span class="required">*</span></label><input type="text" id="stat-num-3" required placeholder="e.g. 15+"><span class="error-msg"></span></div>
+                  <div class="form-group"><label for="stat-lbl-3">Label <span class="required">*</span></label><input type="text" id="stat-lbl-3" required placeholder="e.g. Certifications"><span class="error-msg"></span></div>
+                </fieldset>
+              </div>
+            </div>
+
+            <!-- STEP 4: SKILLS -->
+            <div class="wizard-step" id="step-content-4">
+              <div class="step-header">
+                <h1 class="step-title">Tech Stack Inventory</h1>
+                <p class="step-subtitle">Review, adjust levels, and populate your categorized skills list.</p>
+              </div>
+              <div style="background:var(--color-glass-bg);border:1px solid var(--color-card-border);padding:1.25rem;border-radius:var(--border-radius-sm);margin-bottom:2rem;display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end;">
+                <div class="form-group" style="margin:0;">
+                  <label for="new-skill-name">Skill Name</label>
+                  <input type="text" id="new-skill-name" placeholder="e.g. React.js, Docker, Java">
+                </div>
+                <div class="form-group" style="margin:0;">
+                  <label for="new-skill-category">Category</label>
+                  <select id="new-skill-category" style="width:100%;height:48px;padding:0.75rem;border-radius:var(--border-radius-sm);border:1px solid var(--color-card-border);background:var(--color-bg);color:var(--color-text);">
+                    <option value="frontend">Frontend / UI UX</option>
+                    <option value="backend">Backend / Databases</option>
+                    <option value="systems">Systems / Cloud / Ops</option>
+                  </select>
+                </div>
+                <button type="button" id="btn-add-skill" class="btn btn-secondary" style="height:48px;width:100px;">Add</button>
+              </div>
+              <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:1rem;">Frontend Skills</h2>
+              <div class="dynamic-list-container" id="skills-list-frontend" style="margin-bottom:2rem;"></div>
+              <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:1rem;">Backend Skills</h2>
+              <div class="dynamic-list-container" id="skills-list-backend" style="margin-bottom:2rem;"></div>
+              <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:1rem;">Systems &amp; Operations</h2>
+              <div class="dynamic-list-container" id="skills-list-systems" style="margin-bottom:1rem;"></div>
+            </div>
+
+            <!-- STEP 5: PROJECTS -->
+            <div class="wizard-step" id="step-content-5">
+              <div class="step-header">
+                <h1 class="step-title">Projects Portfolio</h1>
+                <p class="step-subtitle">Customize three premier showcase projects that demonstrate your engineering talents.</p>
+              </div>
+              <div class="dynamic-list-container" id="projects-container"></div>
+            </div>
+
+            <div id="setup-status" class="form-status" style="margin-top:1.5rem;" role="status" aria-live="polite"></div>
+
+            <div class="wizard-footer" id="wizard-footer">
+              <button type="button" id="btn-back" class="btn btn-secondary" style="visibility:hidden;"><span>Back</span></button>
+              <button type="button" id="btn-next" class="btn btn-primary">
+                <span>Next</span>
+                <span class="loader-spinner" aria-hidden="true" style="margin-left:0.5rem;display:none;"></span>
+              </button>
+            </div>
+          </form>
+        </main>
+      </div>
+    </div>
+  </div><!-- /view-setup -->
+
+
+  <!-- ================================================================
+       VIEW 4: ADMIN DASHBOARD
+  ================================================================ -->
+  <div id="view-admin" class="app-view">
+    <header id="admin-header" class="admin-header">
+      <div class="container nav-container">
+        <div class="logo-admin-row">
+          <a href="#" class="logo" aria-label="AuraPort Home" onclick="navigate('portfolio')">
+            <span class="logo-accent">&lt;</span><span id="admin-logo-text">AuraPort</span><span class="logo-accent">/&gt;</span>
+          </a>
+          <span class="admin-badge">AuraPort Panel</span>
+          <span id="session-username" style="font-size:0.85rem;font-weight:600;opacity:0.85;margin-left:0.5rem;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);padding:0.25rem 0.6rem;border-radius:4px;display:inline-block;"></span>
+        </div>
+        <div class="nav-actions">
+          <div class="status-indicator"><span class="status-dot"></span><span class="status-text">Connected</span></div>
+          <button id="admin-theme-toggle" class="theme-toggle-btn" aria-label="Toggle Color Scheme">
+            <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+          <button type="button" id="logout-btn" class="btn btn-secondary logout-action-btn">Log Out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="admin-dashboard-container container">
+      <div class="admin-layout-grid">
+        <aside class="admin-sidebar glass-float-card-static" aria-label="Dashboard Panels">
+          <ul class="admin-tabs-list">
+            <li><button type="button" class="admin-tab-btn active" data-tab="profile-panel"><span class="tab-icon">👤</span> Profile Details</button></li>
+            <li><button type="button" class="admin-tab-btn" data-tab="stats-panel"><span class="tab-icon">📈</span> Metrics &amp; Stats</button></li>
+            <li><button type="button" class="admin-tab-btn" data-tab="skills-panel"><span class="tab-icon">🛠️</span> Skills Inventory</button></li>
+            <li><button type="button" class="admin-tab-btn" data-tab="projects-panel"><span class="tab-icon">📁</span> Selected Projects</button></li>
+            <li><button type="button" class="admin-tab-btn" data-tab="resume-panel"><span class="tab-icon">📄</span> Resume Uploader</button></li>
+          </ul>
+          <div class="sidebar-footer-info">
+            <p>Logged in as: <strong id="admin-sidebar-user">Admin</strong></p>
+            <button type="button" class="btn btn-secondary btn-full-width" style="margin-bottom:0.75rem;font-size:0.85rem;padding:0.6rem 1rem;" onclick="navigate('setup')">
+              🚀 Relaunch Setup Wizard
+            </button>
+            <button type="button" id="download-portfolio-btn" class="btn btn-primary btn-full-width" style="margin-bottom:0.75rem;font-size:0.85rem;padding:0.6rem 1rem;">
+              ⬇️ Download Portfolio Package
+            </button>
+            <a href="#" class="view-site-link" id="btn-view-portfolio" onclick="navigate('portfolio')">View Portfolio &rarr;</a>
+          </div>
+        </aside>
+
+        <section class="admin-content-card glass-float-card-static" aria-labelledby="active-panel-title">
+          <div id="dashboard-global-loader" class="global-dashboard-spinner-overlay">
+            <div class="dashboard-big-spinner"></div>
+            <p>Fetching active portfolio details...</p>
+          </div>
+
+          <form id="portfolio-data-form" novalidate>
+            <!-- Panel 1: Profile -->
+            <div class="admin-tab-panel active" id="profile-panel">
+              <h2 class="panel-heading">Profile Biography Details</h2>
+              <p class="panel-subheading">Update your introduction text, email, location details, and social channels.</p>
+              <div class="form-row">
+                <div class="form-group"><label for="admin-profile-name">Full Name <span class="required">*</span></label><input type="text" id="admin-profile-name" required placeholder="Your Full Name"></div>
+                <div class="form-group"><label for="admin-profile-title">Professional Title <span class="required">*</span></label><input type="text" id="admin-profile-title" required placeholder="Creative Full-Stack Engineer"></div>
+              </div>
+              <div class="form-group"><label for="admin-profile-subtitle">Hero Subtitle <span class="required">*</span></label><textarea id="admin-profile-subtitle" rows="3" required placeholder="Describe your focus..."></textarea></div>
+              <div class="form-row">
+                <div class="form-group"><label for="admin-profile-location">Location <span class="required">*</span></label><input type="text" id="admin-profile-location" required placeholder="San Francisco, CA"></div>
+                <div class="form-group"><label for="admin-profile-education">Education <span class="required">*</span></label><input type="text" id="admin-profile-education" required placeholder="B.S. in Computer Science"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="admin-profile-specialization">Specialization <span class="required">*</span></label><input type="text" id="admin-profile-specialization" required placeholder="Full-Stack &amp; AI Engineering"></div>
+                <div class="form-group"><label for="admin-profile-email">Email <span class="required">*</span></label><input type="email" id="admin-profile-email" required placeholder="alex@gmail.com"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label for="admin-profile-github">GitHub URL</label><input type="url" id="admin-profile-github" placeholder="https://github.com/username"></div>
+                <div class="form-group"><label for="admin-profile-linkedin">LinkedIn URL</label><input type="url" id="admin-profile-linkedin" placeholder="https://linkedin.com/in/username"></div>
+              </div>
+              <div class="form-group"><label for="admin-profile-twitter">Twitter / X URL</label><input type="url" id="admin-profile-twitter" placeholder="https://twitter.com/username"></div>
+            </div>
+
+            <!-- Panel 2: Stats -->
+            <div class="admin-tab-panel" id="stats-panel">
+              <h2 class="panel-heading">Metrics &amp; Statistics Grid</h2>
+              <p class="panel-subheading">Update the key highlights displayed under your bio section. Exactly 4 metric cards are supported.</p>
+              <div id="stats-inputs-container" class="admin-stats-form-grid"></div>
+            </div>
+
+            <!-- Panel 3: Skills -->
+            <div class="admin-tab-panel" id="skills-panel">
+              <div class="panel-header-action-row">
+                <div><h2 class="panel-heading">Skills Inventory Stack</h2><p class="panel-subheading">Define your tools and technologies. Adjust proficiency levels dynamically.</p></div>
+                <button type="button" id="add-skill-btn" class="btn btn-secondary btn-icon-only" aria-label="Add Skill">+ Add Skill</button>
+              </div>
+              <div class="table-responsive">
+                <table class="admin-crud-table">
+                  <thead><tr><th>Skill Name</th><th>Category</th><th>Expertise %</th><th class="actions-header-column">Actions</th></tr></thead>
+                  <tbody id="skills-crud-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Panel 4: Projects -->
+            <div class="admin-tab-panel" id="projects-panel">
+              <div class="panel-header-action-row">
+                <div><h2 class="panel-heading">Selected Projects Vault</h2><p class="panel-subheading">Manage items shown in the projects section.</p></div>
+                <button type="button" id="add-project-btn" class="btn btn-secondary">+ Add Project</button>
+              </div>
+              <div id="projects-crud-list" class="admin-projects-list"></div>
+            </div>
+
+            <!-- Panel 5: Resume -->
+            <div class="admin-tab-panel" id="resume-panel">
+              <h2 class="panel-heading">Resume PDF Uploader</h2>
+              <p class="panel-subheading">Import your latest professional resume. Uploading adds a download anchor to your live portfolio.</p>
+              <div class="resume-uploader-card">
+                <div id="resume-link-preview" class="resume-preview-status-box">
+                  <span class="preview-badge-status">Status</span>
+                  <span id="resume-active-label" class="preview-text-label">Checking resume status...</span>
+                </div>
+                <div id="resume-dragzone" class="upload-dropzone">
+                  <div class="dropzone-visual-info">
+                    <span class="dropzone-icon">📥</span>
+                    <p class="dropzone-title">Drag &amp; Drop Resume PDF here</p>
+                    <p class="dropzone-limits">Only PDF files accepted (Max 5MB)</p>
+                    <span class="btn btn-secondary">Select File</span>
+                  </div>
+                  <input type="file" id="resume-file-input" name="resume" accept="application/pdf" class="hidden-file-input" aria-label="Select resume PDF">
+                </div>
+                <div id="upload-progress-bar-container" class="upload-progress-outer" style="display:none;">
+                  <div class="upload-progress-label-row">
+                    <span>Uploading...</span>
+                    <span id="upload-pct-label">0%</span>
+                  </div>
+                  <div class="upload-progress-bar-bg"><div id="upload-active-progress" class="upload-progress-bar-fill" style="width:0%;"></div></div>
+                </div>
+                <div id="uploader-feedback" class="form-status" role="status" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <!-- Global Save -->
+            <div class="dashboard-footer-sticky-actions">
+              <div id="global-save-status" class="form-status" role="status" aria-live="polite"></div>
+              <button type="submit" id="save-all-btn" class="btn btn-primary">
+                <span>Save Portfolio Modifications</span>
+                <span class="loader-spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <!-- Project Edit Dialog -->
+    <dialog id="project-edit-modal" closedby="any" aria-labelledby="project-dialog-title">
+      <div class="modal-box admin-modal-box">
+        <header class="modal-header">
+          <h2 id="project-dialog-title" class="modal-title">Edit Project Card Details</h2>
+          <button type="button" class="close-modal-btn" id="close-project-dialog-btn" aria-label="Close">&times;</button>
+        </header>
+        <form id="project-edit-form" novalidate class="contact-form modal-body">
+          <input type="hidden" id="edit-project-index">
+          <div class="form-row">
+            <div class="form-group"><label for="edit-project-title">Project Title <span class="required">*</span></label><input type="text" id="edit-project-title" required placeholder="Synapse Workspace"></div>
+            <div class="form-group"><label for="edit-project-id">Unique ID (letters only) <span class="required">*</span></label><input type="text" id="edit-project-id" required placeholder="synapse"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="edit-project-meta">Metadata Subtitle <span class="required">*</span></label><input type="text" id="edit-project-meta" required placeholder="Collaboration • AI Systems"></div>
+            <div class="form-group"><label for="edit-project-tag">Aesthetic Tag <span class="required">*</span></label><input type="text" id="edit-project-tag" required placeholder="&lt;Workspace/&gt;"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="edit-project-gradient">Gradient Style <span class="required">*</span></label>
+              <select id="edit-project-gradient" required>
+                <option value="visual-synapse">Aurora Purple &amp; Indigo</option>
+                <option value="visual-zenith">Teal Green &amp; Ocean</option>
+                <option value="visual-vapor">Warm Red &amp; Ember</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="edit-project-category">Category <span class="required">*</span></label>
+              <select id="edit-project-category" required>
+                <option value="frontend">Frontend UI/UX</option>
+                <option value="backend">Backend Servers</option>
+                <option value="ai-ml">AI &amp; Systems</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group"><label for="edit-project-desc">Short Description <span class="required">*</span></label><textarea id="edit-project-desc" rows="2" required placeholder="Briefly describe this project..."></textarea></div>
+          <div class="form-group"><label for="edit-project-details">Full Narrative <span class="required">*</span></label><textarea id="edit-project-details" rows="4" required placeholder="Detailed architecture, challenges, and implementation..."></textarea></div>
+          <div class="form-group"><label for="edit-project-techs">Technologies (comma-separated) <span class="required">*</span></label><input type="text" id="edit-project-techs" required placeholder="HTML5, CSS Grid, Node.js, WebSockets"></div>
+          <div class="modal-footer" style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--color-card-border);display:flex;justify-content:flex-end;gap:1rem;">
+            <button type="button" class="btn btn-secondary" id="cancel-project-edit-btn">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Project</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  </div><!-- /view-admin -->
+
+  <!-- Interface Settings Customizer Toggle & Panel -->
+  <button id="customizer-toggle" class="customizer-toggle-btn" aria-label="Open Interface Customizer" aria-expanded="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+  </button>
+
+  <div id="customizer-panel" class="customizer-panel glass-float-card-static" aria-hidden="true">
+    <div class="customizer-header">
+      <h3>Interface Settings</h3>
+      <button id="customizer-close" class="btn-close" aria-label="Close customizer">&times;</button>
+    </div>
+    <div class="customizer-body">
+      <div class="customizer-group">
+        <span class="customizer-label">Accent Theme</span>
+        <div class="accent-selectors">
+          <button class="accent-dot theme-purple active" data-accent="purple" aria-label="Purple Accent Theme" title="Royal Purple"></button>
+          <button class="accent-dot theme-teal" data-accent="teal" aria-label="Teal Accent Theme" title="Ocean Teal"></button>
+          <button class="accent-dot theme-coral" data-accent="coral" aria-label="Coral Accent Theme" title="Sunset Coral"></button>
+          <button class="accent-dot theme-emerald" data-accent="emerald" aria-label="Emerald Accent Theme" title="Cyber Emerald"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Assistant Chatbot Toggle & Window -->
+  <button id="chatbot-toggle" class="chatbot-toggle-btn" aria-label="Open AI Developer Assistant" aria-expanded="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span class="chat-status-pulse"></span>
+  </button>
+
+  <div id="chatbot-window" class="chatbot-window glass-float-card-static" aria-hidden="true">
+    <div class="chatbot-header">
+      <div class="bot-info">
+        <span class="bot-avatar">🤖</span>
+        <div>
+          <h4>AuraBot</h4>
+          <span class="bot-status">AI Developer Assistant</span>
+        </div>
+      </div>
+      <button id="chatbot-close" class="btn-close" aria-label="Close chatbot">&times;</button>
+    </div>
+    <div class="chatbot-messages" id="chatbot-messages">
+      <div class="msg message-bot">
+        Hello! I'm AuraBot, your AI guide. Ask me about skills, projects, certifications, or how to get in touch!
+      </div>
+    </div>
+    <div class="chatbot-input-row">
+      <input type="text" id="chatbot-input" placeholder="Type a message..." aria-label="Message chatbot">
+      <button id="chatbot-send-btn" class="chatbot-send-btn" aria-label="Send message">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Floating Back-to-Top Button -->
+  <button id="back-to-top" class="back-to-top-btn" aria-label="Back to Top">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+  </button>
+
+  <!-- Resume Preview Modal -->
+  <dialog id="resume-modal" closedby="any" aria-labelledby="resume-modal-title">
+    <div class="modal-box resume-modal-box">
+      <header class="modal-header">
+        <h2 id="resume-modal-title" class="modal-title">Curriculum Vitae</h2>
+        <button type="button" id="close-resume-modal-btn" class="close-modal-btn" aria-label="Close Resume Modal">&times;</button>
+      </header>
+      <div class="modal-body resume-modal-body">
+        <div class="resume-actions-top">
+          <button type="button" id="resume-download-btn" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Download PDF</span>
+          </button>
+        </div>
+        <div class="resume-frame-container">
+          <div class="resume-mockup" id="resume-mockup-content">
+            <!-- Dynamically generated resume view based on profile details -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Resume Parse Result Modal -->
+  <dialog id="resume-parse-result-modal" class="modal-dialog" aria-labelledby="parse-result-title">
+    <div class="modal-content glass-float-card-static">
+      <div class="modal-header">
+        <h2 id="parse-result-title">Resume Analysis Results</h2>
+        <button type="button" id="close-parse-result-btn" class="modal-close-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+        <div id="parse-result-content" style="display:grid;gap:2rem;">
+          <!-- Profile Section -->
+          <div>
+            <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:0.5rem;">👤 Profile Extracted</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.9rem;">
+              <div><strong>Name:</strong> <span id="parse-name">—</span></div>
+              <div><strong>Email:</strong> <span id="parse-email">—</span></div>
+              <div><strong>Title:</strong> <span id="parse-title">—</span></div>
+              <div><strong>Location:</strong> <span id="parse-location">—</span></div>
+              <div><strong>Education:</strong> <span id="parse-education">—</span></div>
+              <div><strong>Specialization:</strong> <span id="parse-specialization">—</span></div>
+            </div>
+          </div>
+
+          <!-- Stats Section -->
+          <div>
+            <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:0.5rem;">📊 Stats Extracted</h3>
+            <div id="parse-stats-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.75rem;"></div>
+          </div>
+
+          <!-- Skills Section -->
+          <div>
+            <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:0.5rem;">🛠️ Skills Extracted</h3>
+            <div id="parse-skills-list" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.85rem;"></div>
+          </div>
+
+          <!-- Projects Section -->
+          <div>
+            <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:0.5rem;">🚀 Projects Extracted</h3>
+            <div id="parse-projects-list" style="display:grid;gap:1rem;"></div>
+          </div>
+
+          <!-- Recommendations Section -->
+          <div id="parse-recommendations-section" style="display:none;">
+            <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:0.5rem;">📈 Skill Recommendations</h3>
+            <p style="font-size:0.85rem;color:var(--color-text-muted);margin-bottom:1rem;">Skills you may want to develop based on your profile and industry trends:</p>
+            <div id="parse-recommendations-list" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.85rem;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;gap:1rem;margin-top:2rem;">
+        <button type="button" id="confirm-parse-result-btn" class="btn btn-primary btn-full-width">Accept & Apply to Portfolio</button>
+        <button type="button" id="cancel-parse-result-btn" class="btn btn-secondary btn-full-width">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Socket.io real-time client -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+
+  <!-- Unified SPA Script -->
+  <script src="js/app.js"></script>
+</body>
+</html>
