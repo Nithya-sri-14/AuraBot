@@ -44,6 +44,27 @@ if (process.env.NODE_ENV === 'production') {
 }
 app.use(compression());
 
+// In-memory user cache to avoid disk reads on every login
+let usersCache = null;
+let usersCacheTs = 0;
+const USERS_CACHE_TTL = 30000; // 30 seconds
+
+async function getUsers() {
+  if (usersCache && Date.now() - usersCacheTs < USERS_CACHE_TTL) return usersCache;
+  if (fs.existsSync(USERS_FILE)) {
+    usersCache = JSON.parse(await fsPromises.readFile(USERS_FILE, 'utf8'));
+  } else {
+    usersCache = [];
+  }
+  usersCacheTs = Date.now();
+  return usersCache;
+}
+
+function invalidateUsersCache() {
+  usersCache = null;
+  usersCacheTs = 0;
+}
+
 // In-memory request tracker for active sessions and security rate limiting
 const rateLimitStore = {};
 const startTime = Date.now();
@@ -262,9 +283,7 @@ app.post('/api/auth/register', async (req, res) => {
 
   let users = [];
   try {
-    if (fs.existsSync(USERS_FILE)) {
-      users = JSON.parse(await fsPromises.readFile(USERS_FILE, 'utf8'));
-    }
+    users = await getUsers();
   } catch (err) {
     console.error('Error reading users database:', err);
   }
@@ -276,12 +295,13 @@ app.post('/api/auth/register', async (req, res) => {
 
   const userId = sanitizeUserId(normalizedEmail);
   const displayName = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '_') || 'user';
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 8);
   const newUser = { id: userId, email: normalizedEmail, username: displayName, password: hashedPassword };
   users.push(newUser);
 
   try {
     await fsPromises.writeFile(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+    invalidateUsersCache();
 
     const userPortfolioFile = path.join(DATA_DIR, `portfolio_${userId}.json`);
     if (fs.existsSync(PORTFOLIO_FILE)) {
@@ -321,9 +341,7 @@ app.post('/api/auth/login', async (req, res) => {
 
   let users = [];
   try {
-    if (fs.existsSync(USERS_FILE)) {
-      users = JSON.parse(await fsPromises.readFile(USERS_FILE, 'utf8'));
-    }
+    users = await getUsers();
   } catch (err) {
     console.error('Error reading users database:', err);
   }
@@ -1390,6 +1408,21 @@ io.on('connection', (socket) => {
 // Helper to emit portfolio update to all watchers
 function emitPortfolioUpdate(username) {
   io.to(`user:${username}`).emit('portfolio:updated', { user: username, timestamp: Date.now() });
-  // Also broadcast to anyone viewing this user's portfolio
   io.emit('portfolio:updated', { user: username, timestamp: Date.now() });
+}
+
+// Self-keepalive — prevents Render free-tier cold start by pinging every 10 minutes
+if (process.env.NODE_ENV === 'production' || process.env.KEEPALIVE_URL) {
+  const KEEPALIVE_URL = process.env.KEEPALIVE_URL || `http://localhost:${PORT}/api/status`;
+  setInterval(async () => {
+    try {
+      const http = require('http');
+      await new Promise((resolve, reject) => {
+        const req = http.get(KEEPALIVE_URL, resolve);
+        req.on('error', reject);
+        req.setTimeout(5000, () => { req.destroy(); reject(new Error('timeout')); });
+      });
+    } catch (_) {}
+  }, 10 * 60 * 1000);
+  console.log(`[Keepalive] Self-pinging every 10 min via ${KEEPALIVE_URL}`);
 }

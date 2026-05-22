@@ -1034,11 +1034,16 @@ function initAuthView(activeTab) {
     if (sp) sp.style.display = 'inline-block';
     loginStatus.textContent = 'Authenticating...'; loginStatus.className = 'form-status';
 
+    const coldStartTimer = setTimeout(() => {
+      loginStatus.textContent = 'Server is waking up — please wait...'; loginStatus.className = 'form-status';
+    }, 5000);
+
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail.value.trim(), password: loginPassword.value })
       });
+      clearTimeout(coldStartTimer);
       const data = await res.json();
 
       if (res.ok && data.success) {
@@ -1064,6 +1069,7 @@ function initAuthView(activeTab) {
         loginPassword.value = '';
       }
     } catch (err) {
+      clearTimeout(coldStartTimer);
       loginStatus.textContent = 'Connection failed.'; loginStatus.className = 'form-status error';
     } finally {
       loginSubmit.disabled = false; if (sp) sp.style.display = 'none';
@@ -1110,11 +1116,16 @@ function initAuthView(activeTab) {
     if (sp) sp.style.display = 'inline-block';
     signupStatus.textContent = 'Creating account...'; signupStatus.className = 'form-status';
 
+    const coldStartTimer = setTimeout(() => {
+      signupStatus.textContent = 'Server is waking up — please wait...'; signupStatus.className = 'form-status';
+    }, 5000);
+
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: signupEmail.value.trim(), password: signupPassword.value })
       });
+      clearTimeout(coldStartTimer);
       const data = await res.json();
 
       if (res.ok && data.success) {
@@ -1127,6 +1138,7 @@ function initAuthView(activeTab) {
         signupStatus.textContent = data.error || 'Registration failed.'; signupStatus.className = 'form-status error';
       }
     } catch (err) {
+      clearTimeout(coldStartTimer);
       signupStatus.textContent = 'Connection failed.'; signupStatus.className = 'form-status error';
     } finally {
       signupSubmit.disabled = false; if (sp) sp.style.display = 'none';
