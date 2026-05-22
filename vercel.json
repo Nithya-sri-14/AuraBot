@@ -1,8 +1,8 @@
 {
   "framework": null,
   "outputDirectory": "frontend",
-  "buildCommand": null,
-  "installCommand": null,
+  "buildCommand": "",
+  "installCommand": "",
   "headers": [
     {
       "source": "/css/(.*)",
