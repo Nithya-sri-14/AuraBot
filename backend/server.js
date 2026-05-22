@@ -1,9 +1,11 @@
 const express = require('express');
 const http = require('http');
 const { Server: SocketIOServer } = require('socket.io');
+const compression = require('compression');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const fsPromises = fs.promises;
 const multer = require('multer');
 const nodemailer = require('nodemailer');
 const { PDFParse } = require('pdf-parse');
@@ -15,7 +17,10 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
-  cors: { origin: process.env.CORS_ORIGIN || true, methods: ['GET', 'POST'] }
+  cors: { origin: process.env.CORS_ORIGIN || true, methods: ['GET', 'POST'] },
+  transports: ['websocket'],
+  perMessageDeflate: false,
+  maxHttpBufferSize: 1e6
 });
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'please_set_strong_secret_in_env';
@@ -32,32 +37,61 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50kb' }));
 
+// Production optimizations
+if (process.env.NODE_ENV === 'production') {
+  app.enable('trust proxy');
+  app.disable('x-powered-by');
+}
+app.use(compression());
+
 // In-memory request tracker for active sessions and security rate limiting
 const rateLimitStore = {};
 const startTime = Date.now();
 
-// Custom IP Rate Limiting Middleware (Recruiter and Rubric requirement)
+// In-memory portfolio cache with TTL
+const portfolioCache = new Map();
+const CACHE_TTL = 10 * 1000; // 10 seconds
+
+function getCachedPortfolio(key) {
+  const entry = portfolioCache.get(key);
+  if (entry && Date.now() - entry.ts < CACHE_TTL) return entry.data;
+  portfolioCache.delete(key);
+  return null;
+}
+
+function setCachedPortfolio(key, data) {
+  portfolioCache.set(key, { data, ts: Date.now() });
+}
+
+function invalidatePortfolioCache(user) {
+  portfolioCache.delete(`portfolio_${user}.json`);
+}
+
+// Custom IP Rate Limiting Middleware — O(1) sliding window counter
 function apiRateLimiter(req, res, next) {
   const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   const now = Date.now();
-  const timeframe = 60 * 1000; // 1 minute
-  const maxRequests = 60; // Max 60 requests per minute
+  const timeframe = 60 * 1000;
+  const maxRequests = 60;
 
   if (!rateLimitStore[ip]) {
-    rateLimitStore[ip] = [];
+    rateLimitStore[ip] = { count: 0, windowStart: now };
   }
 
-  // Filter out older requests
-  rateLimitStore[ip] = rateLimitStore[ip].filter(timestamp => now - timestamp < timeframe);
+  const entry = rateLimitStore[ip];
+  if (now - entry.windowStart > timeframe) {
+    entry.count = 0;
+    entry.windowStart = now;
+  }
 
-  if (rateLimitStore[ip].length >= maxRequests) {
+  entry.count++;
+  if (entry.count > maxRequests) {
     return res.status(429).json({
       success: false,
       error: 'Security Warning: Too many requests from this IP. Please try again after 60 seconds.'
     });
   }
 
-  rateLimitStore[ip].push(now);
   next();
 }
 
@@ -172,24 +206,30 @@ const authenticateAdmin = (req, res, next) => {
 // --------------------------------------------------------------------------
 // 1. General Portfolio Data Route (Supports user query parameter)
 // --------------------------------------------------------------------------
-app.get('/api/portfolio', (req, res) => {
+app.get('/api/portfolio', async (req, res) => {
   try {
     let targetUser = req.query.user || req.query.u || 'admin';
-    
-    // Sanitize input to prevent directory traversal
     targetUser = targetUser.replace(/[^a-zA-Z0-9_-]/g, '');
 
     const userPortfolioFile = path.join(DATA_DIR, `portfolio_${targetUser}.json`);
-    let activeFile = userPortfolioFile;
 
-    if (!fs.existsSync(userPortfolioFile)) {
-      activeFile = PORTFOLIO_FILE; // Fallback to template
+    const cached = getCachedPortfolio(userPortfolioFile);
+    if (cached) {
+      cached.profile = cached.profile || {};
+      cached.profile.username = targetUser;
+      return res.status(200).json(cached);
     }
 
-    const data = fs.readFileSync(activeFile, 'utf8');
+    let activeFile = userPortfolioFile;
+    if (!fs.existsSync(userPortfolioFile)) {
+      activeFile = PORTFOLIO_FILE;
+    }
+
+    const data = await fsPromises.readFile(activeFile, 'utf8');
     const parsedData = JSON.parse(data);
 
-    // Dynamic website logo/branding helper field: username
+    setCachedPortfolio(userPortfolioFile, parsedData);
+
     if (parsedData.profile) {
       parsedData.profile.username = targetUser;
     }
@@ -203,7 +243,7 @@ app.get('/api/portfolio', (req, res) => {
 // --------------------------------------------------------------------------
 // 2. Authentication Routes (Register & Login)
 // --------------------------------------------------------------------------
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -220,17 +260,15 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long.' });
   }
 
-  // Load existing database users
   let users = [];
   try {
     if (fs.existsSync(USERS_FILE)) {
-      users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+      users = JSON.parse(await fsPromises.readFile(USERS_FILE, 'utf8'));
     }
   } catch (err) {
     console.error('Error reading users database:', err);
   }
 
-  // Ensure unique email
   const userExists = users.some(u => normalizeEmail(u.email || u.username || '') === normalizedEmail);
   if (userExists) {
     return res.status(400).json({ success: false, error: 'That email is already registered.' });
@@ -238,23 +276,22 @@ app.post('/api/auth/register', (req, res) => {
 
   const userId = sanitizeUserId(normalizedEmail);
   const displayName = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '_') || 'user';
-  const hashedPassword = bcrypt.hashSync(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 10);
   const newUser = { id: userId, email: normalizedEmail, username: displayName, password: hashedPassword };
   users.push(newUser);
 
   try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+    await fsPromises.writeFile(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
 
-    // Clone template portfolio_data.json into portfolio_<userId>.json
     const userPortfolioFile = path.join(DATA_DIR, `portfolio_${userId}.json`);
     if (fs.existsSync(PORTFOLIO_FILE)) {
-      const templateData = JSON.parse(fs.readFileSync(PORTFOLIO_FILE, 'utf8'));
+      const templateData = JSON.parse(await fsPromises.readFile(PORTFOLIO_FILE, 'utf8'));
       if (templateData.profile) {
         templateData.profile.email = normalizedEmail;
         templateData.profile.hasResume = false;
         templateData.profile.subtitle = 'Welcome to my portfolio';
       }
-      fs.writeFileSync(userPortfolioFile, JSON.stringify(templateData, null, 2), 'utf8');
+      await fsPromises.writeFile(userPortfolioFile, JSON.stringify(templateData, null, 2), 'utf8');
     }
 
     const token = jwt.sign({ userId, email: normalizedEmail }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -273,7 +310,7 @@ app.post('/api/auth/register', (req, res) => {
   }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -282,18 +319,22 @@ app.post('/api/auth/login', (req, res) => {
 
   const normalizedEmail = normalizeEmail(email);
 
-  // Validate credentials in USERS_FILE
   let users = [];
   try {
     if (fs.existsSync(USERS_FILE)) {
-      users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+      users = JSON.parse(await fsPromises.readFile(USERS_FILE, 'utf8'));
     }
   } catch (err) {
     console.error('Error reading users database:', err);
   }
 
   const matchedUser = users.find(u => normalizeEmail(u.email || u.username || '') === normalizedEmail || normalizeEmail(u.username || '') === normalizedEmail);
-  if (!matchedUser || !bcrypt.compareSync(password, matchedUser.password)) {
+  if (!matchedUser) {
+    return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+  }
+
+  const passwordValid = await bcrypt.compare(password, matchedUser.password);
+  if (!passwordValid) {
     return res.status(401).json({ success: false, error: 'Invalid email or password.' });
   }
 
@@ -313,11 +354,10 @@ app.post('/api/auth/login', (req, res) => {
 // --------------------------------------------------------------------------
 // 3. Protected Route: Update Portfolio JSON Database
 // --------------------------------------------------------------------------
-app.post('/api/portfolio', authenticateAdmin, (req, res) => {
+app.post('/api/portfolio', authenticateAdmin, async (req, res) => {
   const newPortfolioData = req.body;
   const username = req.adminUser || 'admin';
 
-  // Basic validation of keys
   if (!newPortfolioData.profile || !newPortfolioData.stats || !newPortfolioData.skills || !newPortfolioData.projects) {
     return res.status(400).json({ success: false, error: 'Invalid database payload structural keys.' });
   }
@@ -325,18 +365,18 @@ app.post('/api/portfolio', authenticateAdmin, (req, res) => {
   const userPortfolioFile = path.join(DATA_DIR, `portfolio_${username}.json`);
 
   try {
-    // Retain the hasResume field if it's not present in the update
     if (fs.existsSync(userPortfolioFile)) {
-      const currentData = JSON.parse(fs.readFileSync(userPortfolioFile, 'utf8'));
+      const currentData = JSON.parse(await fsPromises.readFile(userPortfolioFile, 'utf8'));
       if (newPortfolioData.profile && currentData.profile) {
         newPortfolioData.profile.hasResume = currentData.profile.hasResume;
       }
     }
 
-    fs.writeFileSync(userPortfolioFile, JSON.stringify(newPortfolioData, null, 2), 'utf8');
+    await fsPromises.writeFile(userPortfolioFile, JSON.stringify(newPortfolioData, null, 2), 'utf8');
+    invalidatePortfolioCache(username);
     console.log(`[Success] Portfolio database for '${username}' successfully modified.`);
     emitPortfolioUpdate(username);
-    
+
     res.status(200).json({
       success: true,
       message: 'Portfolio details saved successfully!'
@@ -368,11 +408,12 @@ app.post('/api/portfolio/resume', authenticateAdmin, (req, res) => {
     try {
       let currentData = {};
       if (fs.existsSync(userPortfolioFile)) {
-        currentData = JSON.parse(fs.readFileSync(userPortfolioFile, 'utf8'));
+        currentData = JSON.parse(await fsPromises.readFile(userPortfolioFile, 'utf8'));
       }
       currentData.profile = currentData.profile || {};
       currentData.profile.hasResume = true;
-      fs.writeFileSync(userPortfolioFile, JSON.stringify(currentData, null, 2), 'utf8');
+      await fsPromises.writeFile(userPortfolioFile, JSON.stringify(currentData, null, 2), 'utf8');
+      invalidatePortfolioCache(username);
       emitPortfolioUpdate(username);
 
       console.log(`[Success] New PDF resume successfully uploaded for user '${username}'.`);
@@ -897,18 +938,15 @@ function generateSkillRecommendations(skills, text) {
   return recs.slice(0, 6);
 }
 
-app.post('/api/portfolio/import-resume', authenticateAdmin, (req, res) => {
+app.post('/api/portfolio/import-resume', authenticateAdmin, async (req, res) => {
   const username = req.adminUser || 'admin';
 
-  // Quick-start / GitHub import (JSON body with quickStart flag)
   if (req.body && req.body.quickStart) {
     let parsedData;
 
     if (req.body.fullData) {
-      // Full data provided (e.g. from GitHub import)
       parsedData = req.body.fullData;
     } else {
-      // Minimal quick start — just name + title
       const name = req.body.name || 'User';
       const title = req.body.title || 'Developer';
       parsedData = {
@@ -928,7 +966,8 @@ app.post('/api/portfolio/import-resume', authenticateAdmin, (req, res) => {
 
     parsedData.profile.hasResume = false;
     const userPortfolioFile = path.join(DATA_DIR, `portfolio_${username}.json`);
-    fs.writeFileSync(userPortfolioFile, JSON.stringify(parsedData, null, 2), 'utf8');
+    await fsPromises.writeFile(userPortfolioFile, JSON.stringify(parsedData, null, 2), 'utf8');
+    invalidatePortfolioCache(username);
     emitPortfolioUpdate(username);
     return res.status(200).json({ success: true, message: 'Portfolio created successfully!', data: parsedData });
   }
@@ -948,7 +987,7 @@ app.post('/api/portfolio/import-resume', authenticateAdmin, (req, res) => {
     const filePath = req.file.path;
 
     try {
-      const dataBuffer = fs.readFileSync(filePath);
+      const dataBuffer = await fsPromises.readFile(filePath);
       const parser = new PDFParse({ data: dataBuffer });
       const textResult = await parser.getText();
       const extractedText = textResult.text;
@@ -1028,7 +1067,8 @@ Return ONLY the raw JSON string matching this schema. Do not enclose it in markd
       }
 
       const userPortfolioFile = path.join(DATA_DIR, `portfolio_${username}.json`);
-      fs.writeFileSync(userPortfolioFile, JSON.stringify(parsedData, null, 2), 'utf8');
+      await fsPromises.writeFile(userPortfolioFile, JSON.stringify(parsedData, null, 2), 'utf8');
+      invalidatePortfolioCache(username);
       emitPortfolioUpdate(username);
 
       res.status(200).json({
@@ -1134,24 +1174,24 @@ app.get('/api/portfolio/export', authenticateAdmin, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Portfolio not found for export.' });
     }
 
-    const portfolioData = JSON.parse(fs.readFileSync(userPortfolioFile, 'utf8'));
+    const portfolioData = JSON.parse(await fsPromises.readFile(userPortfolioFile, 'utf8'));
     const zip = new JSZip();
     zip.file('README.txt', `Generated by AuraPort Portfolio Builder for ${username}\n`);
     zip.file('portfolio-data.json', JSON.stringify(portfolioData, null, 2));
     zip.file('index.html', renderExportHtml(portfolioData));
 
-    const cssPath = path.join(FRONTEND_PATH, 'css', 'style.css');
+    const cssPath = path.join(FRONTEND_PATH, 'css', 'style.min.css');
     if (fs.existsSync(cssPath)) {
-      zip.folder('css').file('style.css', fs.readFileSync(cssPath, 'utf8'));
+      zip.folder('css').file('style.css', await fsPromises.readFile(cssPath, 'utf8'));
     }
 
     const assetsDir = path.join(FRONTEND_PATH, 'assets');
     if (fs.existsSync(assetsDir)) {
       const assetsFolder = zip.folder('assets');
-      fs.readdirSync(assetsDir).forEach(file => {
-        const content = fs.readFileSync(path.join(assetsDir, file));
+      for (const file of fs.readdirSync(assetsDir)) {
+        const content = await fsPromises.readFile(path.join(assetsDir, file));
         assetsFolder.file(file, content);
-      });
+      }
     }
 
     const archiveContent = await zip.generateAsync({ type: 'nodebuffer' });
@@ -1208,11 +1248,11 @@ app.post('/api/contact', async (req, res) => {
   try {
     let savedSubmissions = [];
     if (fs.existsSync(CONTACT_FILE)) {
-      const fileData = fs.readFileSync(CONTACT_FILE, 'utf8');
+      const fileData = await fsPromises.readFile(CONTACT_FILE, 'utf8');
       savedSubmissions = JSON.parse(fileData || '[]');
     }
     savedSubmissions.push(newSubmission);
-    fs.writeFileSync(CONTACT_FILE, JSON.stringify(savedSubmissions, null, 2), 'utf8');
+    await fsPromises.writeFile(CONTACT_FILE, JSON.stringify(savedSubmissions, null, 2), 'utf8');
   } catch (error) {
     console.error(`[Error] Failed to save contact submission:`, error.message);
   }
@@ -1250,29 +1290,58 @@ app.post('/api/contact', async (req, res) => {
   });
 });
 
-// Visitor Counter Endpoint
+// Visitor Counter Endpoint (in-memory counter with deferred disk write)
 const VISITORS_FILE = path.join(__dirname, 'data', 'visitors.json');
+let visitorCount = 142;
+let visitorWritePending = false;
+
+async function loadVisitorCount() {
+  try {
+    if (fs.existsSync(VISITORS_FILE)) {
+      const data = await fsPromises.readFile(VISITORS_FILE, 'utf8');
+      const parsed = JSON.parse(data || '{}');
+      if (typeof parsed.count === 'number') visitorCount = parsed.count;
+    }
+  } catch (_) {}
+}
+loadVisitorCount();
+
+function saveVisitorCount() {
+  if (visitorWritePending) return;
+  visitorWritePending = true;
+  setImmediate(async () => {
+    try {
+      await fsPromises.writeFile(VISITORS_FILE, JSON.stringify({ count: visitorCount }, null, 2), 'utf8');
+    } catch (_) {}
+    visitorWritePending = false;
+  });
+}
+
 app.get('/api/status/visitors', (req, res) => {
   try {
-    let count = 142; // Premium starting base count
-    if (fs.existsSync(VISITORS_FILE)) {
-      const data = fs.readFileSync(VISITORS_FILE, 'utf8');
-      const parsed = JSON.parse(data || '{}');
-      if (typeof parsed.count === 'number') {
-        count = parsed.count;
-      }
-    }
-    count++;
-    fs.writeFileSync(VISITORS_FILE, JSON.stringify({ count }, null, 2), 'utf8');
-    res.status(200).json({ success: true, count });
+    visitorCount++;
+    saveVisitorCount();
+    res.status(200).json({ success: true, count: visitorCount });
   } catch (err) {
-    console.error('[Visitor Counter Error]', err.message);
-    res.status(200).json({ success: true, count: 142 }); // Graceful fallback
+    res.status(200).json({ success: true, count: 142 });
   }
 });
 
-// Serve static frontend files
-app.use(express.static(FRONTEND_PATH));
+// Serve static frontend files with caching
+const isProd = process.env.NODE_ENV === 'production';
+app.use(express.static(FRONTEND_PATH, {
+  maxAge: isProd ? '365d' : 0,
+  immutable: isProd,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', isProd ? 'public, max-age=3600' : 'no-cache');
+    } else if (filePath.endsWith('.css') || filePath.endsWith('.js')) {
+      res.setHeader('Cache-Control', isProd ? 'public, max-age=31536000, immutable' : 'no-cache');
+    } else if (/\.(png|jpg|jpeg|gif|svg|webp|ico|pdf)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', isProd ? 'public, max-age=31536000, immutable' : 'no-cache');
+    }
+  }
+}));
 
 // SPA catch-all — serve index.html for all routes so the client-side router handles navigation
 app.get('*', (req, res) => {

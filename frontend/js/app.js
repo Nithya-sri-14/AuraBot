@@ -185,7 +185,7 @@ function initSocketIO() {
       ? window.location.origin
       : 'https://aurabot-personal-portfolio-website.onrender.com';
     SOCKET = io(backendUrl, {
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 1000
     });
@@ -879,11 +879,11 @@ function handleFilterClick(e) {
 // DEVELOPER ANALYTICS & HUB PIPELINE
 // ---------------------------------------------------------------------------
 function initDeveloperInsights() {
-  // 1. Populate GitHub Contributions Commits Grid
+  // 1. Populate GitHub Contributions Commits Grid (once only)
   const commitsContainer = document.getElementById('github-commits-container');
-  if (commitsContainer) {
+  if (commitsContainer && !commitsContainer.dataset.rendered) {
+    commitsContainer.dataset.rendered = '1';
     let html = '';
-    // Generate 52 weeks x 7 days
     for (let w = 0; w < 52; w++) {
       html += `<div class="github-week-col">`;
       for (let d = 0; d < 7; d++) {
@@ -900,7 +900,7 @@ function initDeveloperInsights() {
     commitsContainer.innerHTML = html;
   }
 
-  // 2. Load and Increment Global Recruiter Session Count from API
+  // 2. Load and Increment Global Recruiter Session Count from API (deferred)
   async function fetchVisitorCount() {
     try {
       const res = await fetch('/api/status/visitors');
@@ -918,7 +918,11 @@ function initDeveloperInsights() {
       console.error('Error fetching visitor counter:', err);
     }
   }
-  fetchVisitorCount();
+  if (window.requestIdleCallback) {
+    requestIdleCallback(() => fetchVisitorCount(), { timeout: 2000 });
+  } else {
+    setTimeout(fetchVisitorCount, 500);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,12 +1053,12 @@ function initAuthView(activeTab) {
             if (pRes.ok) {
               const portfolio = await pRes.json();
               if (!portfolio.profile?.name || portfolio.profile.name === 'Your Name') {
-                setTimeout(() => navigate('setup'), 800); return;
+                navigate('setup'); return;
               }
           }
         } catch (_) {}
 
-        setTimeout(() => navigate('admin'), 800);
+        navigate('admin');
       } else {
         loginStatus.textContent = data.error || 'Invalid credentials.'; loginStatus.className = 'form-status error';
         loginPassword.value = '';
@@ -1650,7 +1654,7 @@ function initSetupView() {
 
       if (res.ok && result.success) {
         setupStatus.textContent = 'Portfolio created! Launching showcase...'; setupStatus.className = 'form-status success';
-        setTimeout(() => navigate('portfolio', { user: sessionUser }), 1200);
+        navigate('portfolio', { user: sessionUser });
       } else {
         throw new Error(result.error || 'Failed to save.');
       }
@@ -1789,7 +1793,7 @@ function initAdminView() {
       if (globalLoader) { globalLoader.style.opacity = '0'; setTimeout(() => { globalLoader.style.display='none'; }, 300); }
     } catch (err) {
       console.error('[Admin Fetch Error]', err);
-      alert('Error: ' + err.message);
+      alert('An unexpected error occurred while loading the dashboard. Please try again later.');
     }
   }
 
