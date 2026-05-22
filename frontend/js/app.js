@@ -183,7 +183,7 @@ function initSocketIO() {
   try {
     const backendUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? window.location.origin
-      : 'https://aurabot-personal-portfolio-website.onrender.com';
+      : 'https://aurabot-smr0.onrender.com';
     SOCKET = io(backendUrl, {
       transports: ['websocket'],
       reconnection: true,
