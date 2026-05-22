@@ -147,6 +147,14 @@
       .choice-grid { grid-template-columns: 1fr; }
       .setup-card { padding: 2.5rem 1.5rem; }
     }
+    @media (max-width: 480px) {
+      .setup-card { padding: 1.5rem 1rem; }
+      .step-label { display: none; }
+      .wizard-footer { flex-direction: column; gap: 0.75rem; }
+      .wizard-footer .btn { width: 100%; }
+      .gradient-select { grid-template-columns: 1fr; }
+      .dropzone-area { padding: 2rem 1rem; }
+    }
     .choice-card {
       background: var(--color-card-bg); border: 1px solid var(--color-card-border);
       border-radius: var(--border-radius-md); padding: 2.5rem 2rem;
